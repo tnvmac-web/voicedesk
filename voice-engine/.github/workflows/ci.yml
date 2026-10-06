@@ -1,0 +1,84 @@
+# GitHub Actions CI for VoiceDesk
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: voicedesk
+          POSTGRES_PASSWORD: voicedesk
+          POSTGRES_DB: voicedesk
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U voicedesk -d voicedesk"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libsndfile1 postgresql-client
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run alembic migrations
+        env:
+          DATABASE_URL: postgresql://voicedesk:voicedesk@localhost:5432/voicedesk
+        run: |
+          alembic upgrade head
+
+      - name: Run linter (ruff)
+        run: ruff check app tests
+
+      - name: Run type checker (mypy)
+        run: mypy app
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://voicedesk:voicedesk@localhost:5432/voicedesk
+        run: pytest -q
+
+  docker-build:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/voicedesk:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to production (placeholder)
+        run: echo "Deploy step goes here"

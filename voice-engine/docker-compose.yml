@@ -1,0 +1,50 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=prod
+      - DATABASE_URL=postgresql://voicedesk:voicedesk@db:5432/voicedesk
+      - SECRET_KEY=${SECRET_KEY}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      # Provider keys (set via .env)
+      - TELEPHONY_PROVIDER=twilio
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+      - STT_PROVIDER=deepgram
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - LLM_PROVIDER=openai
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TTS_PROVIDER=elevenlabs
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - CALENDAR_PROVIDER=internal
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=voicedesk
+      - POSTGRES_PASSWORD=voicedesk
+      - POSTGRES_DB=voicedesk
+    volumes:
+      - voicedesk-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voicedesk -d voicedesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  voicedesk-data:
